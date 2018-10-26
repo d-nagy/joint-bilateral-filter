@@ -1,4 +1,4 @@
-# image-processing-assignment
+# joint-bilateral-filter (Image Processing assignent)
 ## Deadline
 **14:00 on Friday 14th December 2018**
 
