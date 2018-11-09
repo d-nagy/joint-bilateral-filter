@@ -42,9 +42,6 @@ def make_border(img, width):
         A copy of the image with an extrapolated border.
 
     """
-    if not width % 2:
-        raise ValueError("width must be even")
-
     left_border = np.flip(img[:, 1:width+1], 1)
     right_border = np.flip(img[:, -width-1:-1], 1)
 
@@ -72,14 +69,36 @@ def calc_d_matrix(size):
     if not size % 2:
         raise ValueError("nsize must be odd")
 
-    m = np.zeros((size, size))
+    m = np.zeros((size, size, 3))
     centre = size // 2
 
     for y in range(-centre, centre+1):
         for x in range(-centre, centre+1):
-            m[y+centre][x+centre] = np.sqrt(x**2 + y**2)
+            m[y+centre][x+centre] = np.repeat(np.sqrt(x**2 + y**2), 3)
 
     return m
+
+
+def calc_i_matrix(nhood):
+    """
+    Create a matrix containing intensity differences from the centre element.
+
+    Args:
+        nhood: local pixel neighbourhood to create matrix from
+
+    Returns:
+        Matrix with each element equal to the absolute difference in intensity
+        from the centre element.
+
+    """
+    h, w = nhood.shape[0], nhood.shape[1]
+    if h != w:
+        raise ValueError("nhood should be square")
+    elif not h % 2:
+        raise ValueError("nhood should have odd dimensions")
+
+    centre = nhood[h//2, h//2]
+    return np.abs(nhood - centre)
 
 
 def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
@@ -96,7 +115,7 @@ def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
         Copy of the image with a bilateral filter applied to it.
 
     """
-    if nsize % 2:
+    if not nsize % 2:
         raise ValueError("nsize must be odd")
 
     nw = nsize // 2
@@ -110,25 +129,51 @@ def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
     g_color = gaussian(sigmaColor)
     g_space = gaussian(sigmaSpace)
 
-    for y in range(nw, img_w - nw):
-        for x in range(nw, img_h - nw):
+    d_matrix = g_space(d_matrix)
+
+    for y in range(nw, img_h - nw):
+        for x in range(nw, img_w - nw):
+            centre = img[y, x]
             nhood = src[y - nw:y + nw + 1, x - nw:x + nw + 1]
-            centre = nhood[nw][nw]
+            i_matrix = calc_i_matrix(nhood)
+            i_matrix = g_color(i_matrix)
 
-            numerator = 0
-            denominator = 0
-            for j in range(nhood.shape[0]):
-                for i in range(nhood.shape[1]):
-                    p = g_space(d_matrix[j][i])
-                    p *= g_color(np.abs(nhood[j][i] - centre))
-                    numerator += p * centre
-                    denominator += p
+            p = np.multiply(d_matrix, i_matrix)
+            numerator = np.sum(p * nhood, axis=(0, 1))
+            denominator = np.sum(p, axis=(0, 1))
 
-            response = img.dtype(numerator/denominator)
+            # numerator = 0
+            # denominator = 0
+            # for j in range(nhood.shape[0]):
+            #     for i in range(nhood.shape[1]):
+            #         p = d_matrix[j][i] * g_color(np.abs(nhood[j][i] - centre))
+            #         numerator += p * centre
+            #         denominator += p
+
+            response = numerator/denominator
             dst[y-nw, x-nw] = response
 
-    return dst
+    return np.array(dst, dtype=img.dtype)
 
 
 if __name__ == "__main__":
-    pass
+    original_window = "Original Image"
+    edited_window = "Edited Image"
+
+    img = cv2.imread('test_images/test2.png', cv2.IMREAD_COLOR)
+
+    dst1 = cv2.bilateralFilter(img, 7, 100, 100)
+    dst2 = bilateral_filter(img, 7, 100, 100)
+
+    if img is not None:
+        cv2.namedWindow(original_window)
+        cv2.namedWindow(edited_window)
+
+        while True:
+            cv2.imshow(original_window, dst1)
+            cv2.imshow(edited_window, dst2)
+            key = cv2.waitKey(40) & 0xFF
+            if key == ord('x'):
+                break
+
+    cv2.destroyAllWindows()
