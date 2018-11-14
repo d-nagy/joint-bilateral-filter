@@ -98,7 +98,9 @@ def calc_i_matrix(nhood):
         raise ValueError("nhood should have odd dimensions")
 
     centre = nhood[h//2, h//2]
-    return np.abs(nhood - centre)
+    # print(centre)
+    i_matrix = np.array(nhood, dtype=int) - centre
+    return i_matrix
 
 
 def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
@@ -131,27 +133,22 @@ def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
 
     d_matrix = g_space(d_matrix)
 
-    for y in range(nw, img_h - nw):
-        for x in range(nw, img_w - nw):
+    for y in range(img_h):
+        for x in range(img_w):
+            # print(x, y)
             centre = img[y, x]
-            nhood = src[y - nw:y + nw + 1, x - nw:x + nw + 1]
+            # print(centre)
+            nhood = src[y:y + 2*nw + 1, x:x + 2*nw + 1]
             i_matrix = calc_i_matrix(nhood)
             i_matrix = g_color(i_matrix)
 
             p = np.multiply(d_matrix, i_matrix)
-            numerator = np.sum(p * nhood, axis=(0, 1))
+
+            numerator = np.sum(np.multiply(p, nhood), axis=(0, 1))
             denominator = np.sum(p, axis=(0, 1))
 
-            # numerator = 0
-            # denominator = 0
-            # for j in range(nhood.shape[0]):
-            #     for i in range(nhood.shape[1]):
-            #         p = d_matrix[j][i] * g_color(np.abs(nhood[j][i] - centre))
-            #         numerator += p * centre
-            #         denominator += p
-
             response = numerator/denominator
-            dst[y-nw, x-nw] = response
+            dst[y, x] = response
 
     return np.array(dst, dtype=img.dtype)
 
@@ -162,8 +159,9 @@ if __name__ == "__main__":
 
     img = cv2.imread('test_images/test2.png', cv2.IMREAD_COLOR)
 
+    # Two images should look pretty much the same...
     dst1 = cv2.bilateralFilter(img, 7, 100, 100)
-    dst2 = bilateral_filter(img, 7, 100, 100)
+    dst2 = bilateral_filter(img, 7, 20, 100)
 
     if img is not None:
         cv2.namedWindow(original_window)
