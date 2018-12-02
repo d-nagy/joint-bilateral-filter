@@ -103,15 +103,15 @@ def calc_i_matrix(nhood):
     return i_matrix
 
 
-def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
+def bilateral_filter(img, nsize, sigma_color, sigma_space):
     """
     Apply a bilateral filter to an image.
 
     Args:
         img: image to apply filter to
         nsize: diameter of pixel neighbourhood used to filter
-        sigmaColor: filter sigma in color space
-        sigmaSpace: filter sigma in coordinate space
+        sigma_color: filter sigma in color space
+        sigma_space: filter sigma in coordinate space
 
     Returns:
         Copy of the image with a bilateral filter applied to it.
@@ -128,8 +128,8 @@ def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
     src = make_border(img, nw)
     dst = np.empty(img.shape, img.dtype)
 
-    g_color = gaussian(sigmaColor)
-    g_space = gaussian(sigmaSpace)
+    g_color = gaussian(sigma_color)
+    g_space = gaussian(sigma_space)
 
     d_matrix = g_space(d_matrix)
 
@@ -153,7 +153,64 @@ def bilateral_filter(img, nsize, sigmaColor, sigmaSpace):
     return np.array(dst, dtype=img.dtype)
 
 
-if __name__ == "__main__":
+def joint_bilateral_filter(flash_img, noflash_img, nsize,
+                           sigma_color, sigma_space):
+    """
+    Apply a joint bilateral filter to a pair of images, one taken with flash
+    and the other without.
+
+    Args:
+        flash_img: image taken with flash
+        noflash_img: image taken without flash
+        nsize: diameter of pixel neighbourhood used to filter
+        sigma_color: filter sigma in color space
+        sigma_space: filter sigma in coordinate space
+
+    Returns:
+        An image combining the colour attributes from the image without flash
+        and the fine details of the image with flash.
+
+    """
+    if not nsize % 2:
+        raise ValueError("nsize must be odd")
+
+    nw = nsize // 2
+    d_matrix = calc_d_matrix(nsize)
+
+    img_w, img_h = noflash_img.shape[1], noflash_img.shape[0]
+
+    src_noflash = make_border(noflash_img, nw)
+    src_flash = make_border(flash_img, nw)
+    dst = np.empty(noflash_img.shape, noflash_img.dtype)
+
+    g_color = gaussian(sigma_color)
+    g_space = gaussian(sigma_space)
+
+    d_matrix = g_space(d_matrix)
+
+    for y in range(img_h):
+        for x in range(img_w):
+            # print(x, y)
+            centre = noflash_img[y, x]
+            # print(centre)
+            nhood_noflash = src_noflash[y:y + 2*nw + 1, x:x + 2*nw + 1]
+            nhood_flash = src_flash[y:y + 2*nw + 1, x:x + 2*nw + 1]
+
+            i_matrix_flash = calc_i_matrix(nhood_flash)
+            i_matrix_flash = g_color(i_matrix_flash)
+
+            p = np.multiply(d_matrix, i_matrix_flash)
+
+            numerator = np.sum(np.multiply(p, nhood_noflash), axis=(0, 1))
+            denominator = np.sum(p, axis=(0, 1))
+
+            response = numerator/denominator
+            dst[y, x] = response
+
+    return np.array(dst, dtype=noflash_img.dtype)
+
+
+def test_bilateral_filter():
     original_window = "Original Image"
     edited_window = "Edited Image"
 
@@ -175,3 +232,34 @@ if __name__ == "__main__":
                 break
 
     cv2.destroyAllWindows()
+
+
+def test_joint_bilateral_filter():
+    noflash_window = "Original No Flash Image"
+    flash_window = "Original Flash Image"
+    edited_window = "Edited Image"
+
+    noflash_img = cv2.imread('test_images/test3a.jpg', cv2.IMREAD_COLOR)
+    flash_img = cv2.imread('test_images/test3b.jpg', cv2.IMREAD_COLOR)
+
+    dst = joint_bilateral_filter(flash_img, noflash_img, 7, 0.01, 13)
+
+    if noflash_img is not None and flash_img is not None:
+        cv2.namedWindow(noflash_window)
+        cv2.namedWindow(flash_window)
+        cv2.namedWindow(edited_window)
+
+        while True:
+            cv2.imshow(noflash_window, noflash_img)
+            cv2.imshow(flash_window, flash_img)
+            cv2.imshow(edited_window, dst)
+            key = cv2.waitKey(40) & 0xFF
+            if key == ord('x'):
+                break
+
+    cv2.destroyAllWindows()
+
+
+if __name__ == "__main__":
+    # test_bilateral_filter()
+    test_joint_bilateral_filter()
